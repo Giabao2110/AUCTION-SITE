@@ -1,0 +1,42 @@
+# BIDHUB — Operations and acceptance (planned)
+
+## Implemented baseline
+
+See root README to start web/API/database. Liveness checks process; readiness checks DB connection. Local DB is bound to loopback. No production server is provisioned by this scaffold.
+
+## Deployment ownership: Bảo
+
+1. Select an agreed Linux host and budget; record CPU/RAM/OS/location.
+2. Build web and API from the exact tested commit; pin dependency lockfile. API container entry/config must bind internally to 0.0.0.0 (local bootstrap currently binds 127.0.0.1).
+3. Run PostgreSQL on private Docker network, no public database port; unique secret password and persistent volume. Configure API DATABASE_URL to db service name, not localhost.
+4. Nginx serves web assets; SPA fallback to index.html; proxies /api and /socket.io with HTTP/1.1 Upgrade/Connection headers, appropriate timeouts and exact origin.
+5. Configure DNS and valid TLS certificate; port 80 redirects to 443, SSH restricted. Secure session cookies in HTTPS; do not log headers/cookies.
+6. Run versioned DB migration as a release step and readiness check before traffic. Test 2 browsers and reconnect. Avoid migrations requiring destructive rollback during demo week.
+7. Keep previous release image/build for rollback; database migrations must remain compatible or use documented backup recovery. Never promise code rollback also undoes schema/data changes.
+
+## Backup / restore exercise
+
+Đạt documents DB schema/data expectations, Bảo writes scripts. Use pg_dump custom archive, store backup outside public web root with restricted access, define retention. Restore into a separate test DB, compare users/auctions/bids/results counts and inspect a sample auction. Record start/end time and actual restored state. Target lab RPO <=24h and RTO <=30min; these are goals, not existing guarantees. Do not test restore by overwriting staging DB.
+
+## Acceptance scenario set
+
+- Fresh checkout: install, migrate, seed, start; repeated migrate does not recreate tables.
+- User A seller, B/C bidders: register/login; A creates/publishes; B/C view same auction.
+- First bid equals opening accepted; below opening rejected; next bid below minimum rejected; self-bid rejected.
+- 10 simultaneous same-price valid requests from bidders: one new accepted bid; current price/highest bidder/history consistent. Run with actual PostgreSQL, no mocked repository.
+- Duplicate request key/body returns same bid; different body/auction with same key gets conflict; retry after timeout doesn't double-insert.
+- Bid accepted <=30s from deadline extends remaining time to >=60s; close worker reads updated deadline; bid at/after ends_at rejected.
+- Disconnect B, C bids, B reconnects: REST refresh catches up; older socket version does not overwrite newer REST state.
+- Close job/restart: one result; no-bid auction has no winner; cancelled auction cannot accept bid.
+- Unauthorized owner/admin request denied; missing CSRF denied; disabled account cannot reuse old session.
+- HTTPS/WSS through Nginx; refresh nested frontend URL succeeds; database port inaccessible publicly; frontend JS has no secret.
+- Phone viewport: list/detail/forms usable; loading/error/empty and keyboard labels visible.
+
+## Demo script (8–10 minutes)
+
+1. Phú (2 min): home/search/detail and seller flow.
+2. Đạt (3 min): two bidders, accepted/rejected bid, anti-sniping and result; explain lock/transaction/idempotency.
+3. Bảo (3 min): disconnect/reconnect, architecture/network/HTTPS, CI and actual load/recovery evidence.
+4. All (1–2 min): limitations, individual contributions, questions.
+
+Prepare short-duration seeded auctions before demo, separate seller/bidder browsers, local fallback and recorded backup clip. Use non-sensitive sample data. Do not publish real passwords in the public repo.

@@ -1,0 +1,13 @@
+{
+  "name": "bidhub", "private": true, "version": "0.1.0",
+  "workspaces": ["apps/*", "packages/*"],
+  "engines": {"node": ">=24 <25"},
+  "scripts": {
+    "dev:web": "npm run dev --workspace @bidhub/web",
+    "dev:api": "npm run dev --workspace @bidhub/api",
+    "build": "npm run build --workspace @bidhub/contracts && npm run build --workspace @bidhub/api && npm run build --workspace @bidhub/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspace @bidhub/api",
+    "db:migrate": "npm run db:migrate --workspace @bidhub/api"
+  }
+}
