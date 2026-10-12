@@ -1,3 +1,3 @@
-# AUCTION-SITE
+# BIDHUB
 
-Auction Site | Web Application Development project.
+Real-Time Auction Platform | Web Application Development project.
