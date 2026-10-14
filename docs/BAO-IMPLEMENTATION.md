@@ -1,0 +1,38 @@
+# Phần Bảo — Infrastructure / Realtime
+
+## Đã triển khai
+
+- API HOST cấu hình được cho Docker; structured request logs gồm request ID/status/duration, không log body/header/query.
+- JSON parser error có request ID và HTTP 413 cho body quá lớn.
+- Socket auction:join/leave: validate UUID, kiểm tra DB phiên không phải DRAFT, tối đa 5 phòng/connection, 20 operations/10 giây, serialize join tránh race vượt giới hạn.
+- Exact Origin ở Socket handshake; client web phải cùng WEB_ORIGIN.
+- withTransaction helper: BEGIN/COMMIT/ROLLBACK, release connection, callback event chỉ sau commit; callback lỗi không biến bid đã commit thành lỗi HTTP.
+- Dockerfiles API/web, compose ứng dụng với DB private và readiness, Nginx SPA fallback/API proxy/WebSocket upgrade/API rate limit.
+- Mẫu TLS host Nginx và backup script Linux dùng pg_dump archive, không ghi đè backup cũ.
+
+## Tích hợp cho Đạt và Phú
+
+Đạt dùng `withTransaction(pool, async (client, afterCommit) => ...)`: mọi repository dùng cùng client, đăng ký `afterCommit(() => publishAuctionUpdate(snapshot))` khi snapshot đã được dựng trong transaction. Publisher tạo bằng `createAuctionPublisher(io)` ở composition root rồi inject vào service; không import server.ts từ service. Không phát event trực tiếp trước commit. Helper chưa được ghép vào bid service vì service chưa tồn tại.
+
+Phú dùng Socket.IO client cùng origin, join sau mỗi connect/reconnect; ack lỗi hiển thị trạng thái phù hợp; GET snapshot REST sau join; version cũ bỏ qua; polling fallback theo API-CONTRACT. Không có fake auction data hoặc bid API trong phần hạ tầng.
+
+## Chạy full stack bằng Docker
+
+Tạo file env riêng ngoài Git, gồm DB_PASSWORD mạnh, DATABASE_URL `postgres://bidhub:<URL-encoded-password>@db:5432/bidhub`, WEB_ORIGIN `http://localhost:8080` ở local hoặc origin HTTPS thật.
+
+```
+docker compose --env-file /path/to/private.env -f infra/compose.app.yaml up -d --build
+docker compose --env-file /path/to/private.env -f infra/compose.app.yaml exec -T api node apps/api/dist/database/migrate.js
+```
+
+Mở localhost:8080; API/DB không publish host port. Compose readiness mới kiểm tra kết nối DB, không kiểm tra schema đã migrate. Migrate trước khi thử auction rooms. Không tự động chạy migration khi API khởi động.
+
+Production: cài host Nginx, sửa domain/certificate trong host-tls.conf.example; cấu hình WEB_ORIGIN HTTPS. Container web chỉ bind loopback. Mẫu certificate path cần chứng chỉ thật, chưa phải HTTPS deployed.
+
+Backup: export DB_PASSWORD/DATABASE_URL/WEB_ORIGIN trong shell trước khi chạy `sh infra/backup.sh /private/backups/bidhub.dump`, hoặc đưa env file qua COMPOSE_ENV_FILES. Restore vào DB test riêng: tạo DB bằng createdb rồi chạy pg_restore -U bidhub -d bidhub_restore --no-owner từ archive; không dùng --clean vào DB đang chạy. So sánh counts users/auctions/bids/results và lưu thời gian restore.
+
+## Phần phụ thuộc còn lại
+
+BH-14 scheduler và BH-19 test tranh chấp cần service nghiệp vụ BH-11 của Đạt; chưa hoàn thành. BH-17 chưa triển khai host thực tế vì chưa có VPS/domain. BH-18 chưa có backup/restore thực nghiệm hay dashboard host. BH-21/BH-22 release/demo cần toàn bộ MVP. Không ghi các mục này là done.
+
+Kiểm tra Docker engine trước khi build containers; trên máy hiện tại engine chưa chạy ở thời điểm bắt đầu triển khai. Unit helper tests dùng client giả để kiểm tra thứ tự commit; socket integration dùng server/client thật, không chứng minh transaction PostgreSQL đồng thời.

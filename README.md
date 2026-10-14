@@ -37,5 +37,8 @@ Open http://localhost:5173. API liveness: http://localhost:3000/api/v1/health/li
 - [API and realtime contract](docs/API-CONTRACT.md)
 - [Detailed assignments and 8-week timeline](docs/TEAM-PLAN.md)
 - [Operations and demo acceptance](docs/RUNBOOK.md)
+- [Bảo infrastructure/realtime implementation and deployment](docs/BAO-IMPLEMENTATION.md)
+
+Infrastructure update: auction room validation/caps, after-commit transaction helper, structured request logs and full-stack Docker/Nginx configuration are implemented. Bid/close services still need integration. Docker/TLS deployment and restore exercise have not been run on a real host.
 
 The schedule targets 6 December 2026 provisionally; confirm the course's actual deadline. Money is stored as integer VND and serialized as strings. All times are UTC in storage/API; display in Asia/Ho_Chi_Minh.
