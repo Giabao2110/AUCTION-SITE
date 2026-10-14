@@ -33,6 +33,17 @@ Backup: export DB_PASSWORD/DATABASE_URL/WEB_ORIGIN trong shell trước khi ch�
 
 ## Phần phụ thuộc còn lại
 
-BH-14 scheduler và BH-19 test tranh chấp cần service nghiệp vụ BH-11 của Đạt; chưa hoàn thành. BH-17 chưa triển khai host thực tế vì chưa có VPS/domain. BH-18 chưa có backup/restore thực nghiệm hay dashboard host. BH-21/BH-22 release/demo cần toàn bộ MVP. Không ghi các mục này là done.
+BH-14 scheduler đã có implementation và test PostgreSQL được cấu hình trong CI; chưa xác minh cùng bid/cancel service BH-11 của Đạt. BH-19 test tranh chấp bid/close vẫn cần BH-11. BH-17 chưa triển khai host thực tế vì chưa có VPS/domain. BH-18 chưa có backup/restore thực nghiệm hay dashboard host. BH-21/BH-22 release/demo cần toàn bộ MVP. Không ghi các mục này là done.
 
 Kiểm tra Docker engine trước khi build containers; trên máy hiện tại engine chưa chạy ở thời điểm bắt đầu triển khai. Unit helper tests dùng client giả để kiểm tra thứ tự commit; socket integration dùng server/client thật, không chứng minh transaction PostgreSQL đồng thời.
+
+## Bổ sung 15/10/2026
+
+- Scheduler quét ngay khi startup, rồi mỗi 3 giây, batch tối đa 100, không chạy chồng tick. Dùng FOR UPDATE SKIP LOCKED để nhiều worker không xử lý cùng row; BEGIN/COMMIT bao toàn batch.
+- SCHEDULED đến giờ thành ACTIVE; SCHEDULED đã quá hạn sau downtime được chốt ENDED trực tiếp. ACTIVE quá hạn tạo result từ bid cao nhất, rồi đổi status/version. Nếu không bid thì winner/final price null. Callback realtime chỉ chạy sau commit.
+- Bid/cancel service bắt buộc khóa cùng auction row; scheduler dùng clock_timestamp sau khóa và điều kiện due kiểm tra ends_at ở DB. Hiện chưa test race cùng bid service thật vì chưa có service.
+- Scheduler dừng và đợi tick đang chạy trước khi đóng pool. Nếu DB/schema chưa sẵn, ghi event lỗi và thử ở tick sau.
+- Test DB dùng TEST_DATABASE_URL và schema riêng; CI có PostgreSQL 17, chạy test lifecycle/multiple workers và Docker image builds. Không xem CI là pass trước khi run thực sự hoàn tất.
+- Script `infra/restore-test.sh` tạo DB riêng, khôi phục và in counts; giữ DB để kiểm tra rồi xóa thủ công. Dùng cùng environment setup với backup.sh.
+- `node scripts/load-health.mjs`: baseline liveness, cấu hình LOAD_URL/LOAD_CLIENTS/LOAD_REQUESTS, in p95/error rate và thời gian. Không đo SQL/bid/realtime và không dùng để tuyên bố hiệu năng toàn ứng dụng.
+- Socket test có disconnect/reconnect và rejoin; xác nhận room không tự giữ sau reconnect. REST resync vẫn là phần client cần tích hợp.

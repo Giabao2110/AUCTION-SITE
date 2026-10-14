@@ -22,5 +22,15 @@ test('real socket joins public auction, rejects drafts/invalid IDs and enforces 
     const received = new Promise(resolve => client.once('auction:updated', resolve));
     io.to(auctionRoom('00000000-0000-4000-8000-000000000001')).emit('auction:updated', { auction: { version: 2 } });
     assert.deepEqual(await received, { auction: { version: 2 } });
+    // Reconnect creates a new socket: old room membership must not survive.
+    client.disconnect();
+    const reconnected = new Promise<void>((resolve, reject) => { client.once('connect', resolve); client.once('connect_error', reject); });
+    client.connect();
+    await reconnected;
+    assert.equal(io.sockets.sockets.get(client.id!)?.rooms.has(auctionRoom('00000000-0000-4000-8000-000000000001')), false);
+    assert.equal((await join('00000000-0000-4000-8000-000000000001')).ok, true);
+    const afterReconnect = new Promise(resolve => client.once('auction:updated', resolve));
+    io.to(auctionRoom('00000000-0000-4000-8000-000000000001')).emit('auction:updated', { auction: { version: 3 } });
+    assert.deepEqual(await afterReconnect, { auction: { version: 3 } });
   } finally { client.disconnect(); await new Promise<void>(resolve => io.close(() => resolve())); }
 });

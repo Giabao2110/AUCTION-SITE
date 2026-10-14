@@ -6,6 +6,7 @@ import { pool } from './database/pool.js';
 import { registerAuctionRooms } from './realtime/auction-rooms.js';
 import { createAuctionPublisher } from './realtime/publisher.js';
 import { log } from './observability/logger.js';
+import { processAuctionLifecycle, startAuctionLifecycle } from './jobs/auction-lifecycle.js';
 const server = createServer(app);
 const io = new Server(server, {
   cors: { origin: env.webOrigin }, maxHttpBufferSize: 4096,
@@ -19,7 +20,7 @@ registerAuctionRooms(io, async id => {
 // Inject the returned publisher into services at composition time; services must
 // import publisher.ts, NOT server.ts (which starts the HTTP server).
 const publishAuctionUpdate = createAuctionPublisher(io);
-void publishAuctionUpdate; // Wire into bid/close services when they exist.
+const stopLifecycle = startAuctionLifecycle(() => processAuctionLifecycle(pool, publishAuctionUpdate));
 server.listen(env.port, env.host, () => log('server_started', { port: env.port, host: env.host }));
 let stopping = false;
 function stop() {
@@ -27,7 +28,9 @@ function stop() {
   stopping = true;
   const deadline = setTimeout(() => process.exit(1), 10000);
   deadline.unref();
-  io.close(() => { void pool.end().then(() => { clearTimeout(deadline); log('server_stopped'); }); });
+  io.close(() => {
+    void stopLifecycle().then(() => pool.end()).then(() => { clearTimeout(deadline); log('server_stopped'); });
+  });
 }
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
