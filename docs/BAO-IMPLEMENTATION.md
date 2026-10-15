@@ -47,3 +47,13 @@ Kiểm tra Docker engine trước khi build containers; trên máy hiện tại 
 - Script `infra/restore-test.sh` tạo DB riêng, khôi phục và in counts; giữ DB để kiểm tra rồi xóa thủ công. Dùng cùng environment setup với backup.sh.
 - `node scripts/load-health.mjs`: baseline liveness, cấu hình LOAD_URL/LOAD_CLIENTS/LOAD_REQUESTS, in p95/error rate và thời gian. Không đo SQL/bid/realtime và không dùng để tuyên bố hiệu năng toàn ứng dụng.
 - Socket test có disconnect/reconnect và rejoin; xác nhận room không tự giữ sau reconnect. REST resync vẫn là phần client cần tích hợp.
+
+## CI full-stack verification
+
+Run `38622632923` cho commit `662e155` đã success trên GitHub: test PostgreSQL lifecycle và build Docker API/web đã chạy thực sự. Local Docker vẫn chưa bật.
+
+CI mở rộng khởi động Compose, chạy migration hai lần để kiểm tra idempotency, rồi test SPA fallback, health routes, Socket.IO polling/WebSocket qua Nginx và từ chối Origin khác. Backup pg_dump rồi restore vào database riêng cũng chạy trong CI. Xem kết quả run của commit mới trước khi coi bộ kiểm tra bổ sung đã pass.
+
+Test locking bổ sung giữ auction row bằng transaction riêng, xác nhận worker SKIP LOCKED không chốt phiên, gia hạn rồi commit và kiểm tra worker vẫn không kết thúc sớm. Đây là kiểm tra primitive PostgreSQL, chưa thay thế test HTTP bid service của Đạt.
+
+Pool giới hạn statement 5 giây và idle transaction 10 giây; services cần giữ transaction ngắn, không gọi network trong transaction. Idle DB disconnect được ghi log thay vì gây unhandled error.

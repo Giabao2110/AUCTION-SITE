@@ -39,5 +39,17 @@ test('lifecycle: restart catch-up, concurrent workers, winner and extended deadl
     assert.equal(statuses.find(r => r.id === cancelled).status, 'CANCELLED');
     assert.equal(events.length, 3);
     assert.equal(await processAuctionLifecycle(db, () => assert.fail('duplicate event')), 0);
+    // A bid transaction holding the row lock must not be closed by this worker.
+    const locked = await create('ACTIVE', '-1 hour');
+    const bidderTransaction = await db.connect();
+    try {
+      await bidderTransaction.query('BEGIN');
+      await bidderTransaction.query('SELECT id FROM auctions WHERE id=$1 FOR UPDATE', [locked]);
+      assert.equal(await processAuctionLifecycle(db, () => assert.fail('locked auction emitted')), 0);
+      await bidderTransaction.query("UPDATE auctions SET ends_at=clock_timestamp()+interval '1 hour',version=version+1 WHERE id=$1", [locked]);
+      await bidderTransaction.query('COMMIT');
+      assert.equal(await processAuctionLifecycle(db, () => assert.fail('extended auction closed')), 0);
+      assert.equal((await db.query('SELECT 1 FROM auction_results WHERE auction_id=$1', [locked])).rowCount, 0);
+    } finally { await bidderTransaction.query('ROLLBACK'); bidderTransaction.release(); }
   } finally { await db.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end(); }
 });
